@@ -124,4 +124,5 @@ if uploaded_file is not None:
                 st.write(answer)
                 with st.expander("참고 문서 확인"):
                     for doc in response['context']:
-                        st.markdown(doc.metadata['source'], help=doc.page_content)
+                        source = doc.metadata.get('source', 'Uploaded File')
+                        st.markdown(f"출처: {source}", help=doc.page_content)
