@@ -25,7 +25,6 @@ os.environ["OPENAI_API_KEY"] = st.secrets['OPENAI_API_KEY']
 
 #cache_resource로 한번 실행한 결과 캐싱해두기
 @st.cache_resource
-
 def load_and_split_pdf(file_path):
     loader = PyPDFLoader(file_path)
     return loader.load_and_split()
@@ -57,25 +56,13 @@ def get_vectorstore(_docs):
     
 # PDF 문서 로드-벡터 DB 저장-검색기-히스토리 모두 합친 Chain 구축
 @st.cache_resource
-def initialize_components(selected_model, uploaded_file):
-    # 파일 업로드 처리
-    if uploaded_file is not None:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-            tmp_file.write(uploaded_file.read())
-            file_path = tmp_file.name
-    else:
-        # 기본 파일 경로 (서버에 저장된 헌법 파일)
-        file_path = r"./대한민국헌법(헌법)(제00010호)(19880225).pdf"
-
+def initialize_components(selected_model, file_path):
     pages = load_and_split_pdf(file_path)
     vectorstore = get_vectorstore(pages)
     retriever = vectorstore.as_retriever()
 
     # 채팅 히스토리 요약 시스템 프롬프트
-    contextualize_q_system_prompt = """Given a chat history and the latest user question \
-    which might reference context in the chat history, formulate a standalone question \
-    which can be understood without the chat history. Do NOT answer the question, \
-    just reformulate it if needed and otherwise return it as is."""
+    contextualize_q_system_prompt = """Given a chat history and the latest user question \n    which might reference context in the chat history, formulate a standalone question \n    which can be understood without the chat history. Do NOT answer the question, \n    just reformulate it if needed and otherwise return it as is."""
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", contextualize_q_system_prompt),
@@ -85,10 +72,7 @@ def initialize_components(selected_model, uploaded_file):
     )
 
     # 질문-답변 시스템 프롬프트
-    qa_system_prompt = """You are an assistant for question-answering tasks. \
-    Use the following pieces of retrieved context to answer the question. \
-    If you don't know the answer, just say that you don't know. \
-    Keep the answer perfect. please use imogi with the answer.
+    qa_system_prompt = """You are an assistant for question-answering tasks. \n    Use the following pieces of retrieved context to answer the question. \n    If you don't know the answer, just say that you don't know. \n    Keep the answer perfect. please use imogi with the answer.
     대답은 한국어로 하고, 존댓말을 써줘.\
 
     {context}"""
@@ -110,37 +94,43 @@ def initialize_components(selected_model, uploaded_file):
 st.header("Hayan's Q&A 챗봇🦕")
 option = st.selectbox("Select GPT Model", ("gpt-4o-mini", "gpt-3.5-turbo-0125"))
 
-uploaded_file = st.file_uploader("PDF 파일을 업로드하세요.", type="pdf")
-rag_chain = initialize_components(option, uploaded_file)
+# 파일 업로드
+uploaded_file = st.file_uploader("PDF 파일을 업로드하세요", type=["pdf"])
 
-chat_history = StreamlitChatMessageHistory(key="chat_messages")
+if uploaded_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+        temp_file.write(uploaded_file.getvalue())
+        file_path = temp_file.name
 
-conversational_rag_chain = RunnableWithMessageHistory(
-    rag_chain,
-    lambda session_id: chat_history,
-    input_messages_key="input",
-    history_messages_key="history",
-    output_messages_key="answer",
-)
+    rag_chain = initialize_components(option, file_path)
+    chat_history = StreamlitChatMessageHistory(key="chat_messages")
 
-if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", 
-                                     "content": "무엇이든 물어보세요!"}]
+    conversational_rag_chain = RunnableWithMessageHistory(
+        rag_chain,
+        lambda session_id: chat_history,
+        input_messages_key="input",
+        history_messages_key="history",
+        output_messages_key="answer",
+    )
 
-for msg in chat_history.messages:
-    st.chat_message(msg.type).write(msg.content)
+    if "messages" not in st.session_state:
+        st.session_state["messages"] = [{"role": "assistant", 
+                                         "content": "헌법에 대해 무엇이든 물어보세요!"}]
 
-if prompt_message := st.chat_input("Your question"):
-    st.chat_message("human").write(prompt_message)
-    with st.chat_message("ai"):
-        with st.spinner("Thinking..."):
-            config = {"configurable": {"session_id": "any"}}
-            response = conversational_rag_chain.invoke(
-                {"input": prompt_message},
-                config)
-            
-            answer = response['answer']
-            st.write(answer)
-            with st.expander("참고 문서 확인"):
-                for doc in response['context']:
-                    st.markdown(doc.metadata['source'], help=doc.page_content)
+    for msg in chat_history.messages:
+        st.chat_message(msg.type).write(msg.content)
+
+    if prompt_message := st.chat_input("Your question"):
+        st.chat_message("human").write(prompt_message)
+        with st.chat_message("ai"):
+            with st.spinner("Thinking..."):
+                config = {"configurable": {"session_id": "any"}}
+                response = conversational_rag_chain.invoke(
+                    {"input": prompt_message},
+                    config)
+                
+                answer = response['answer']
+                st.write(answer)
+                with st.expander("참고 문서 확인"):
+                    for doc in response['context']:
+                        st.markdown(doc.metadata['source'], help=doc.page_content)
