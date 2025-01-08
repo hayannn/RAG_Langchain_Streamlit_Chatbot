@@ -25,6 +25,7 @@ os.environ["OPENAI_API_KEY"] = st.secrets['OPENAI_API_KEY']
 
 #cache_resource로 한번 실행한 결과 캐싱해두기
 @st.cache_resource
+
 def load_and_split_pdf(file_path):
     loader = PyPDFLoader(file_path)
     return loader.load_and_split()
@@ -56,8 +57,16 @@ def get_vectorstore(_docs):
     
 # PDF 문서 로드-벡터 DB 저장-검색기-히스토리 모두 합친 Chain 구축
 @st.cache_resource
-def initialize_components(selected_model):
-    file_path = r"./대한민국헌법(헌법)(제00010호)(19880225).pdf"
+def initialize_components(selected_model, uploaded_file):
+    # 파일 업로드 처리
+    if uploaded_file is not None:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_file.write(uploaded_file.read())
+            file_path = tmp_file.name
+    else:
+        # 기본 파일 경로 (서버에 저장된 헌법 파일)
+        file_path = r"./대한민국헌법(헌법)(제00010호)(19880225).pdf"
+
     pages = load_and_split_pdf(file_path)
     vectorstore = get_vectorstore(pages)
     retriever = vectorstore.as_retriever()
@@ -98,9 +107,12 @@ def initialize_components(selected_model):
     return rag_chain
 
 # Streamlit UI
-st.header("Hayan's Q&A 챗봇 💬 📚")
+st.header("Hayan's Q&A 챗봇🦕")
 option = st.selectbox("Select GPT Model", ("gpt-4o-mini", "gpt-3.5-turbo-0125"))
-rag_chain = initialize_components(option)
+
+uploaded_file = st.file_uploader("PDF 파일을 업로드하세요.", type="pdf")
+rag_chain = initialize_components(option, uploaded_file)
+
 chat_history = StreamlitChatMessageHistory(key="chat_messages")
 
 conversational_rag_chain = RunnableWithMessageHistory(
