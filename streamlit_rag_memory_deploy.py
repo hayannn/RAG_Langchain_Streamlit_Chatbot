@@ -33,11 +33,19 @@ def load_pdf(_file):
         pages = loader.load_and_split()
     return pages
 
+
+# 기존 벡터 스토어를 삭제하고, 재구성할 수 있도록 코드 수정
+# -> 새로운 PDF를 올리면 그 새로운 PDF를 참고할 수 있도록(기존 내용이 아닌)
 @st.cache_resource
-def create_vector_store(_docs):
+def create_vector_store(_docs, force_rebuild=False):
+    # force_rebuild가 True일 경우 기존 벡터 스토어 삭제
+    persist_directory = "./chroma_db"
+    if force_rebuild and os.path.exists(persist_directory):
+        import shutil
+        shutil.rmtree(persist_directory)  # 기존 벡터 스토어 삭제
+
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     split_docs = text_splitter.split_documents(_docs)
-    persist_directory = "./chroma_db"
     vectorstore = Chroma.from_documents(
         split_docs, 
         OpenAIEmbeddings(model='text-embedding-3-small'),
@@ -46,15 +54,25 @@ def create_vector_store(_docs):
     return vectorstore
 
 @st.cache_resource
-def get_vectorstore(_docs):
+def get_vectorstore(_docs, force_rebuild=False):
     persist_directory = "./chroma_db"
-    if os.path.exists(persist_directory):
+    if os.path.exists(persist_directory) and not force_rebuild:
         return Chroma(
             persist_directory=persist_directory,
             embedding_function=OpenAIEmbeddings(model='text-embedding-3-small')
         )
     else:
-        return create_vector_store(_docs)
+        return create_vector_store(_docs, force_rebuild)
+
+# 새로운 파일이 업로드될 때 벡터 스토어를 강제로 재빌드
+if uploaded_file is not None:
+    pages = load_pdf(uploaded_file)
+    rag_chain = initialize_components(option, pages)
+    chat_history = StreamlitChatMessageHistory(key="chat_messages")
+
+    # 새로운 문서 업로드 시 벡터 스토어 재빌드
+    rag_chain = initialize_components(option, pages)
+
 
 @st.cache_resource
 def initialize_components(selected_model, _docs):
