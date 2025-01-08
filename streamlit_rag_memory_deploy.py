@@ -57,10 +57,6 @@ def get_vectorstore(_docs):
 # PDF 문서 로드-벡터 DB 저장-검색기-히스토리 모두 합친 Chain 구축
 @st.cache_resource
 def initialize_components(selected_model):
-    # 로컬
-    # file_path = r"/Users/hayan/Downloads/대한민국헌법(헌법)(제00010호)(19880225).pdf"
-
-    # 서버
     file_path = r"./대한민국헌법(헌법)(제00010호)(19880225).pdf"
     pages = load_and_split_pdf(file_path)
     vectorstore = get_vectorstore(pages)
@@ -102,7 +98,7 @@ def initialize_components(selected_model):
     return rag_chain
 
 # Streamlit UI
-st.header("헌법 Q&A 챗봇 💬 📚")
+st.header("Hayan's Q&A 챗봇 💬 📚")
 option = st.selectbox("Select GPT Model", ("gpt-4o-mini", "gpt-3.5-turbo-0125"))
 rag_chain = initialize_components(option)
 chat_history = StreamlitChatMessageHistory(key="chat_messages")
@@ -115,14 +111,12 @@ conversational_rag_chain = RunnableWithMessageHistory(
     output_messages_key="answer",
 )
 
-
 if "messages" not in st.session_state:
     st.session_state["messages"] = [{"role": "assistant", 
-                                     "content": "헌법에 대해 무엇이든 물어보세요!"}]
+                                     "content": "무엇이든 물어보세요!"}]
 
 for msg in chat_history.messages:
     st.chat_message(msg.type).write(msg.content)
-
 
 if prompt_message := st.chat_input("Your question"):
     st.chat_message("human").write(prompt_message)
