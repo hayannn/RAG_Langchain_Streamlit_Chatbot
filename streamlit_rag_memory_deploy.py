@@ -64,15 +64,6 @@ def get_vectorstore(_docs, force_rebuild=False):
     else:
         return create_vector_store(_docs, force_rebuild)
 
-# 새로운 파일이 업로드될 때 벡터 스토어를 강제로 재빌드
-if uploaded_file is not None:
-    pages = load_pdf(uploaded_file)
-    rag_chain = initialize_components(option, pages)
-    chat_history = StreamlitChatMessageHistory(key="chat_messages")
-
-    # 새로운 문서 업로드 시 벡터 스토어 재빌드
-    rag_chain = initialize_components(option, pages)
-
 
 @st.cache_resource
 def initialize_components(selected_model, _docs):
