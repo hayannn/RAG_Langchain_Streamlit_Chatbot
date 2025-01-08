@@ -58,10 +58,10 @@ def get_vectorstore(_docs):
 @st.cache_resource
 def initialize_components(selected_model):
     # 로컬
-    file_path = r"/Users/hayan/Downloads/대한민국헌법(헌법)(제00010호)(19880225).pdf"
+    # file_path = r"/Users/hayan/Downloads/대한민국헌법(헌법)(제00010호)(19880225).pdf"
 
     # 서버
-    # file_path = r"./대한민국헌법(헌법)(제00010호)(19880225).pdf"
+    file_path = r"./대한민국헌법(헌법)(제00010호)(19880225).pdf"
     pages = load_and_split_pdf(file_path)
     vectorstore = get_vectorstore(pages)
     retriever = vectorstore.as_retriever()
