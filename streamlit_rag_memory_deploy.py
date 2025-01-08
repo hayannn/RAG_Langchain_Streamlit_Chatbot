@@ -23,7 +23,7 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 from langchain_chroma import Chroma
 os.environ["OPENAI_API_KEY"] = st.secrets['OPENAI_API_KEY']
 
-#cache_resource로 한번 실행한 결과 캐싱해두기
+# cache_resource로 한번 실행한 결과 캐싱해두기
 @st.cache_resource
 def load_pdf(_file):
     with tempfile.NamedTemporaryFile(mode="wb", delete=False) as tmp_file:
@@ -33,9 +33,6 @@ def load_pdf(_file):
         pages = loader.load_and_split()
     return pages
 
-
-# 기존 벡터 스토어를 삭제하고, 재구성할 수 있도록 코드 수정
-# -> 새로운 PDF를 올리면 그 새로운 PDF를 참고할 수 있도록(기존 내용이 아닌)
 @st.cache_resource
 def create_vector_store(_docs, force_rebuild=False):
     # force_rebuild가 True일 경우 기존 벡터 스토어 삭제
@@ -64,10 +61,9 @@ def get_vectorstore(_docs, force_rebuild=False):
     else:
         return create_vector_store(_docs, force_rebuild)
 
-
 @st.cache_resource
 def initialize_components(selected_model, _docs):
-    vectorstore = get_vectorstore(_docs)
+    vectorstore = get_vectorstore(_docs, force_rebuild=True)  # 새 파일 업로드 시 벡터 스토어 재구성
     retriever = vectorstore.as_retriever()
 
     contextualize_q_system_prompt = """Given a chat history and the latest user question \nwhich might reference context in the chat history, formulate a standalone question \nwhich can be understood without the chat history. Do NOT answer the question, \njust reformulate it if needed and otherwise return it as is."""
