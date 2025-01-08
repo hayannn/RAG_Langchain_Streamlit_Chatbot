@@ -25,11 +25,14 @@ os.environ["OPENAI_API_KEY"] = st.secrets['OPENAI_API_KEY']
 
 #cache_resource로 한번 실행한 결과 캐싱해두기
 @st.cache_resource
-def load_and_split_pdf(file_path):
-    loader = PyPDFLoader(file_path)
-    return loader.load_and_split()
+def load_pdf(_file):
+    with tempfile.NamedTemporaryFile(mode="wb", delete=False) as tmp_file:
+        tmp_file.write(_file.getvalue())
+        tmp_file_path = tmp_file.name
+        loader = PyPDFLoader(file_path=tmp_file_path)
+        pages = loader.load_and_split()
+    return pages
 
-#텍스트 청크들을 Chroma 안에 임베딩 벡터로 저장
 @st.cache_resource
 def create_vector_store(_docs):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -42,7 +45,6 @@ def create_vector_store(_docs):
     )
     return vectorstore
 
-#만약 기존에 저장해둔 ChromaDB가 있는 경우, 이를 로드
 @st.cache_resource
 def get_vectorstore(_docs):
     persist_directory = "./chroma_db"
@@ -53,16 +55,13 @@ def get_vectorstore(_docs):
         )
     else:
         return create_vector_store(_docs)
-    
-# PDF 문서 로드-벡터 DB 저장-검색기-히스토리 모두 합친 Chain 구축
+
 @st.cache_resource
-def initialize_components(selected_model, file_path):
-    pages = load_and_split_pdf(file_path)
-    vectorstore = get_vectorstore(pages)
+def initialize_components(selected_model, _docs):
+    vectorstore = get_vectorstore(_docs)
     retriever = vectorstore.as_retriever()
 
-    # 채팅 히스토리 요약 시스템 프롬프트
-    contextualize_q_system_prompt = """Given a chat history and the latest user question \n    which might reference context in the chat history, formulate a standalone question \n    which can be understood without the chat history. Do NOT answer the question, \n    just reformulate it if needed and otherwise return it as is."""
+    contextualize_q_system_prompt = """Given a chat history and the latest user question \nwhich might reference context in the chat history, formulate a standalone question \nwhich can be understood without the chat history. Do NOT answer the question, \njust reformulate it if needed and otherwise return it as is."""
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", contextualize_q_system_prompt),
@@ -71,9 +70,7 @@ def initialize_components(selected_model, file_path):
         ]
     )
 
-    # 질문-답변 시스템 프롬프트
-    qa_system_prompt = """You are an assistant for question-answering tasks. \n    Use the following pieces of retrieved context to answer the question. \n    If you don't know the answer, just say that you don't know. \n    Keep the answer perfect. please use imogi with the answer.
-    대답은 한국어로 하고, 존댓말을 써줘.\
+    qa_system_prompt = """You are an assistant for question-answering tasks. \nUse the following pieces of retrieved context to answer the question. \nIf you don't know the answer, just say that you don't know. \nKeep the answer perfect. please use imogi with the answer.\n대답은 한국어로 하고, 존댓말을 써줘.\
 
     {context}"""
     qa_prompt = ChatPromptTemplate.from_messages(
@@ -90,19 +87,13 @@ def initialize_components(selected_model, file_path):
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
     return rag_chain
 
-# Streamlit UI
 st.header("Hayan's Q&A 챗봇🦕")
 option = st.selectbox("Select GPT Model", ("gpt-4o-mini", "gpt-3.5-turbo-0125"))
 
-# 파일 업로드
-uploaded_file = st.file_uploader("PDF 파일을 업로드하세요", type=["pdf"])
-
+uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-        temp_file.write(uploaded_file.getvalue())
-        file_path = temp_file.name
-
-    rag_chain = initialize_components(option, file_path)
+    pages = load_pdf(uploaded_file)
+    rag_chain = initialize_components(option, pages)
     chat_history = StreamlitChatMessageHistory(key="chat_messages")
 
     conversational_rag_chain = RunnableWithMessageHistory(
@@ -115,7 +106,7 @@ if uploaded_file is not None:
 
     if "messages" not in st.session_state:
         st.session_state["messages"] = [{"role": "assistant", 
-                                         "content": "헌법에 대해 무엇이든 물어보세요!"}]
+                                         "content": "무엇이든 물어보세요!"}]
 
     for msg in chat_history.messages:
         st.chat_message(msg.type).write(msg.content)
